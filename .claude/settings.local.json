@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(find:*)",
+      "Bash(python:*)",
+      "Bash(del configure.py)",
+      "Bash(grep:*)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Read(/D:\\/**)",
+      "WebSearch",
+      "WebFetch(domain:ib-insync.readthedocs.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:algotrading101.com)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "D:\\d\\Claude",
+      "D:\\d"
+    ]
+  }
+}

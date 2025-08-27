@@ -1,0 +1,87 @@
+{
+  "_comment": "Enhanced Weekly ER Trading System Configuration Template",
+  "_instructions": "Copy this to config.json and customize the values for your setup",
+  
+  "ib_host": "127.0.0.1",
+  "ib_port": 7497,
+  "ib_client_id": 7,
+  
+  "capital_per_trade": 10000,
+  "expected_return_pct": 2.0,
+  "stop_loss_pct": 2.0,
+  "atr_stop_multiplier": 1.5,
+  "momentum_period": 126,
+  "spy_ema_period": 50,
+  "vix_max_threshold": 25,
+  
+  "alerts": {
+    "_comment": "Email alert configuration - set email_enabled to true to activate",
+    "email_enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "email_user": "your_trading_email@gmail.com",
+    "email_password": "your_app_password",
+    "recipients": [
+      "trader@example.com",
+      "backup@example.com"
+    ]
+  },
+  
+  "safety_limits": {
+    "_comment": "Position safety limits - adjust based on your risk tolerance",
+    "max_position_value": 50000,
+    "max_portfolio_value": 500000,
+    "max_daily_loss": 10000,
+    "max_position_concentration": 0.15,
+    "max_sector_concentration": 0.30,
+    "emergency_stop_loss": 0.10,
+    "max_positions": 20,
+    "min_cash_reserve": 10000
+  },
+  
+  "connection_monitoring": {
+    "_comment": "Connection monitoring settings",
+    "heartbeat_interval": 30,
+    "max_reconnect_attempts": 5,
+    "reconnect_delay": 10,
+    "safety_check_interval": 300
+  },
+  
+  "options_protection": {
+    "_comment": "Options protection settings",
+    "enable_protective_puts": true,
+    "enable_collar_strategies": false,
+    "enable_portfolio_insurance": true,
+    "max_protection_cost_pct": 0.03,
+    "min_portfolio_value_for_protection": 100000
+  },
+  
+  "logging": {
+    "_comment": "Logging configuration",
+    "log_level": "INFO",
+    "log_to_file": true,
+    "log_file": "logs/enhanced_trading.log",
+    "max_log_size_mb": 100,
+    "backup_count": 5
+  },
+  
+  "trading_schedule": {
+    "_comment": "Trading schedule settings",
+    "market_open_hour": 9,
+    "market_open_minute": 30,
+    "market_close_hour": 16,
+    "market_close_minute": 0,
+    "friday_close_hour": 15,
+    "friday_close_minute": 55,
+    "enable_extended_hours": false
+  },
+  
+  "risk_management": {
+    "_comment": "Additional risk management settings",
+    "enable_correlation_checks": true,
+    "max_correlation_threshold": 0.7,
+    "enable_sector_limits": true,
+    "enable_volatility_scaling": true,
+    "volatility_lookback_days": 30
+  }
+}

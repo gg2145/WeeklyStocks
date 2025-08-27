@@ -1,0 +1,19 @@
+# Core data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Stock data fetching
+yfinance>=0.2.18
+
+# HTML templating
+jinja2>=3.1.0
+
+# Environment variable handling
+python-dotenv>=1.0.0
+
+# HTTP requests with retry logic
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Logging and utilities
+colorlog>=6.7.0

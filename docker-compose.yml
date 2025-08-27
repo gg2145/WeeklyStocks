@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  weekly-er:
+    build: .
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - .:/app
+    network_mode: host
+    restart: unless-stopped

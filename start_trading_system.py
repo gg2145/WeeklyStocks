@@ -15,11 +15,12 @@ def main():
     print("=" * 60)
     print("Loading modern tabbed interface...")
     print("Features:")
-    print("  [*] Professional backtesting with interactive charts")
+    print("  [*] Professional backtesting with interactive charts ✅ FIXED")
     print("  [*] Live trading controls and monitoring")
     print("  [*] IBKR connection testing and setup")
     print("  [*] Complete trading workflow management")
     print("  [*] Modern tabbed interface with all tools")
+    print("  [*] Position monitor with 10+ positions display ✅ OPTIMIZED")
     print("-" * 60)
     
     # Add current directory to path

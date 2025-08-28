@@ -27,28 +27,32 @@ def main():
     
     try:
         # Import and launch the GUI directly (not as subprocess)
-        print("DEBUG: About to import PyQt6...")
+        print("Importing PyQt6...")
         from PyQt6.QtWidgets import QApplication
-        print("DEBUG: PyQt6 imported successfully")
+        print("✅ PyQt6 imported successfully")
         
-        print("DEBUG: About to import BacktestApp...")
+        print("Importing BacktestApp...")
         from backtest_app import BacktestApp
-        print("DEBUG: BacktestApp imported successfully")
+        print("✅ BacktestApp imported successfully")
         
-        print("DEBUG: Creating QApplication...")
-        app = QApplication(sys.argv)
-        print("DEBUG: QApplication created")
+        print("Creating application...")
+        # Check if QApplication already exists
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        print("✅ Application created")
         
-        print("DEBUG: Creating BacktestApp window...")
+        print("Creating main window...")
         window = BacktestApp()
-        print("DEBUG: BacktestApp window created")
+        print("✅ Main window created")
         
-        print("DEBUG: Showing window...")
+        print("Showing window...")
         window.show()
-        print("DEBUG: Window shown, starting event loop...")
+        print("✅ GUI launched successfully!")
+        print("-" * 60)
         
         # Run the application
-        sys.exit(app.exec())
+        return app.exec()
         
     except ImportError as e:
         print(f"[ERROR] Import error: {e}")

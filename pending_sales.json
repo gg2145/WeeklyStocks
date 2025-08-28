@@ -17,56 +17,11 @@
     "status": "PENDING_SALE",
     "action": "SELL"
   },
-  "INTC": {
-    "quantity": 422,
-    "order_type": "MARKET",
-    "price": null,
-    "timestamp": "2025-08-25T18:07:33.788069",
-    "notes": "Close all positions at 18:07:33",
-    "status": "PENDING_SALE",
-    "action": "SELL"
-  },
-  "SIRI": {
-    "quantity": 874,
-    "order_type": "MARKET",
-    "price": null,
-    "timestamp": "2025-08-25T18:07:33.788842",
-    "notes": "Close all positions at 18:07:33",
-    "status": "PENDING_SALE",
-    "action": "SELL"
-  },
-  "VTRS": {
-    "quantity": 1876,
-    "order_type": "MARKET",
-    "price": null,
-    "timestamp": "2025-08-25T18:07:33.789632",
-    "notes": "Close all positions at 18:07:33",
-    "status": "PENDING_SALE",
-    "action": "SELL"
-  },
-  "XLK": {
+  "NVDA": {
     "quantity": 100,
     "order_type": "MARKET",
     "price": null,
-    "timestamp": "2025-08-25T20:27:14.048711",
-    "notes": "Manual buy",
-    "status": "PENDING_BUY",
-    "action": "BUY"
-  },
-  "TQQQ": {
-    "quantity": 100,
-    "order_type": "MARKET",
-    "price": null,
-    "timestamp": "2025-08-25T20:27:53.020042",
-    "notes": "Manual buy",
-    "status": "PENDING_BUY",
-    "action": "BUY"
-  },
-  "ARKK": {
-    "quantity": 100,
-    "order_type": "MARKET",
-    "price": null,
-    "timestamp": "2025-08-25T20:28:05.944272",
+    "timestamp": "2025-08-28T16:38:44.488515",
     "notes": "Manual buy",
     "status": "PENDING_BUY",
     "action": "BUY"

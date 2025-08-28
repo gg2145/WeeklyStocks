@@ -6,6 +6,7 @@ Based on proven ib-insync patterns and best practices
 
 import json
 import sys
+import time
 from PyQt6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
                             QTableWidget, QTableWidgetItem, QPushButton, QLabel, 
                             QTextEdit, QMessageBox, QHeaderView, QGroupBox, QFormLayout)
@@ -24,17 +25,22 @@ class ProfessionalPositionMonitor(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Professional Position Monitor")
-        self.setGeometry(100, 100, 1400, 900)  # Much bigger window
+        
+        # Set window flags to make it more stable
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinMaxButtonsHint | Qt.WindowType.WindowCloseButtonHint)
+        
+        # Use proven working dimensions from working_position_monitor.py
+        self.setMinimumSize(900, 600)
+        self.resize(1000, 600)
+        
+        # Center the window
+        self.move(200, 150)
         
         self.ib = None
         self.positions_data = {}
         self.orders_data = {}
         
         self.init_ui()
-        
-        # Start the Qt event loop integration (proven pattern)
-        if IB_AVAILABLE:
-            util.startLoop()  # This starts the Qt/asyncio event loop integration
         
         # Check for existing IBKR connection on startup
         QTimer.singleShot(500, self.check_existing_connection)
@@ -48,16 +54,18 @@ class ProfessionalPositionMonitor(QDialog):
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header)
         
-        # Connection section - status left, buttons right
-        conn_group = QGroupBox("IBKR Connection")
+        # Connection and Account section - combined for better space usage
+        conn_group = QGroupBox("IBKR Connection & Account")
         conn_layout = QHBoxLayout(conn_group)
         
+        # Left side - Connection status
+        status_section = QVBoxLayout()
         self.status_label = QLabel("Checking connection...")
         self.status_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #f39c12;")
+        status_section.addWidget(self.status_label)
         
-        conn_layout.addWidget(self.status_label)
-        conn_layout.addStretch()
-        
+        # Connection buttons
+        button_layout = QHBoxLayout()
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.setStyleSheet("""
             QPushButton {
@@ -93,22 +101,25 @@ class ProfessionalPositionMonitor(QDialog):
         self.disconnect_btn.clicked.connect(self.disconnect_from_ibkr)
         self.disconnect_btn.setEnabled(False)
         
-        conn_layout.addWidget(self.connect_btn)
-        conn_layout.addWidget(self.disconnect_btn)
-        layout.addWidget(conn_group)
+        button_layout.addWidget(self.connect_btn)
+        button_layout.addWidget(self.disconnect_btn)
+        status_section.addLayout(button_layout)
         
-        # Account info section
-        self.account_group = QGroupBox("Account Information")
-        account_layout = QFormLayout(self.account_group)
-        
+        # Right side - Account info (moved up here)
+        account_section = QFormLayout()
         self.account_label = QLabel("--")
         self.total_value_label = QLabel("--")
         self.total_pnl_label = QLabel("--")
         
-        account_layout.addRow("Account:", self.account_label)
-        account_layout.addRow("Total Value:", self.total_value_label)
-        account_layout.addRow("Unrealized P&L:", self.total_pnl_label)
-        layout.addWidget(self.account_group)
+        account_section.addRow("Account:", self.account_label)
+        account_section.addRow("Total Value:", self.total_value_label)
+        account_section.addRow("Unrealized P&L:", self.total_pnl_label)
+        
+        # Add both sections to main layout
+        conn_layout.addLayout(status_section)
+        conn_layout.addStretch()
+        conn_layout.addLayout(account_section)
+        layout.addWidget(conn_group)
         
         # Positions table - MUCH BIGGER
         positions_group = QGroupBox("Positions & Pending Orders")
@@ -121,12 +132,15 @@ class ProfessionalPositionMonitor(QDialog):
             "Market Price", "Market Value", "Unrealized P&L", "Action"
         ])
         
-        # Make table much bigger - no scrolling needed
-        self.table.setMinimumHeight(400)  # Much bigger
+        # Set standard row height for more positions
+        self.table.verticalHeader().setDefaultSectionSize(35)  # 35px per row - standard table height
         
-        # Style the table
+        # Style the table with fixed Action column width
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Set Action column to fixed width so it's always readable
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Action column (index 7)
+        self.table.setColumnWidth(7, 120)  # Fixed width for Action column
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -150,7 +164,7 @@ class ProfessionalPositionMonitor(QDialog):
         positions_layout.addWidget(self.table)
         layout.addWidget(positions_group)
         
-        # Action buttons
+        # Action buttons - now includes Close Monitor button
         action_layout = QHBoxLayout()
         
         self.refresh_btn = QPushButton("Manual Refresh")
@@ -167,6 +181,20 @@ class ProfessionalPositionMonitor(QDialog):
         self.refresh_btn.clicked.connect(self.manual_refresh)
         self.refresh_btn.setEnabled(False)
         
+        # Close Monitor button moved here to save space
+        self.close_monitor_btn = QPushButton("Close Monitor")
+        self.close_monitor_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #95a5a6; 
+                color: white; 
+                font-weight: bold; 
+                padding: 10px 15px;
+                border-radius: 5px;
+                border: none;
+            }
+        """)
+        self.close_monitor_btn.clicked.connect(self.close)
+        
         self.close_all_btn = QPushButton("Close All Positions")
         self.close_all_btn.setStyleSheet("""
             QPushButton {
@@ -182,45 +210,28 @@ class ProfessionalPositionMonitor(QDialog):
         self.close_all_btn.setEnabled(False)
         
         action_layout.addWidget(self.refresh_btn)
+        action_layout.addWidget(self.close_monitor_btn)
         action_layout.addStretch()
         action_layout.addWidget(self.close_all_btn)
         layout.addLayout(action_layout)
         
-        # Log section - MUCH BIGGER
-        log_group = QGroupBox("Activity Log")
-        log_layout = QVBoxLayout(log_group)
-        
+        # Log section - MINIMAL SIZE without GroupBox
         self.log_text = QTextEdit()
-        self.log_text.setMinimumHeight(200)  # Much bigger
+        self.log_text.setMinimumHeight(30)  # Just enough for one line of text
+        self.log_text.setMaximumHeight(30)  # Force it to stay small
         self.log_text.setReadOnly(True)
         self.log_text.setStyleSheet("""
             QTextEdit {
                 background-color: #2c3e50;
                 color: #ecf0f1;
                 font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 13px;
+                font-size: 11px;
                 border: 1px solid #34495e;
-                padding: 10px;
+                padding: 2px;
+                margin: 0px;
             }
         """)
-        log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group)
-        
-        # Close button
-        close_btn = QPushButton("Close Monitor")
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #95a5a6; 
-                color: white; 
-                font-weight: bold; 
-                padding: 12px;
-                border-radius: 6px;
-                border: none;
-                margin-top: 10px;
-            }
-        """)
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
+        layout.addWidget(self.log_text)
         
     def load_config(self):
         try:
@@ -436,15 +447,49 @@ class ProfessionalPositionMonitor(QDialog):
             for symbol, item in self.positions_data.items():
                 self.table.insertRow(row)
                 
-                # Get position info
+                # Handle both Position and PortfolioItem objects
                 if hasattr(item, 'position'):
                     qty = int(item.position)
-                    value = float(item.marketValue)
-                    pnl = float(item.unrealizedPNL)
-                    avg_cost = float(item.averageCost)
-                    market_price = float(item.marketPrice)
+                    
+                    # Position objects don't have marketValue, PortfolioItem objects do
+                    if hasattr(item, 'marketValue'):
+                        # This is a PortfolioItem
+                        value = float(item.marketValue)
+                        pnl = float(item.unrealizedPNL)
+                        avg_cost = float(item.averageCost)
+                        market_price = float(item.marketPrice)
+                    else:
+                        # This is a Position object - calculate values manually
+                        avg_cost = float(item.avgCost) if hasattr(item, 'avgCost') else 0.0
+                        
+                        # For Position objects, we need to get market price from contract
+                        try:
+                            # Request market data for this symbol
+                            contract = item.contract
+                            ticker = self.ib.reqMktData(contract, '', False, False)
+                            self.ib.sleep(0.1)  # Brief wait for market data
+                            
+                            if ticker and ticker.marketPrice():
+                                market_price = float(ticker.marketPrice())
+                                value = qty * market_price
+                                pnl = value - (qty * avg_cost)
+                            else:
+                                # Fallback values if market data unavailable
+                                market_price = avg_cost
+                                value = qty * avg_cost
+                                pnl = 0.0
+                                
+                            # Cancel the market data subscription
+                            self.ib.cancelMktData(contract)
+                            
+                        except Exception as e:
+                            self.log_message(f"Could not get market data for {symbol}: {e}", "WARNING")
+                            # Use fallback values
+                            market_price = avg_cost
+                            value = qty * avg_cost
+                            pnl = 0.0
                 else:
-                    continue  # Skip if not a portfolio item
+                    continue  # Skip if not a position item
                 
                 total_value += value
                 total_pnl += pnl
@@ -523,13 +568,21 @@ class ProfessionalPositionMonitor(QDialog):
             
         item = self.positions_data[symbol]
         qty = int(item.position)
-        value = float(item.marketValue)
+        
+        # Handle both Position and PortfolioItem objects for value calculation
+        if hasattr(item, 'marketValue'):
+            # This is a PortfolioItem
+            value = float(item.marketValue)
+        else:
+            # This is a Position object - estimate value
+            avg_cost = float(item.avgCost) if hasattr(item, 'avgCost') else 0.0
+            value = qty * avg_cost  # Rough estimate
         
         reply = QMessageBox.question(
             self, 'Close Position',
             f'Close {symbol} position?\n\n'
             f'Quantity: {qty} shares\n'
-            f'Current Value: ${value:,.2f}\n\n'
+            f'Estimated Value: ${value:,.2f}\n\n'
             f'This will place a MARKET SELL order.',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -538,7 +591,7 @@ class ProfessionalPositionMonitor(QDialog):
             self.place_sell_order(symbol, qty)
     
     def close_all_positions(self):
-        """Close all positions"""
+        """Close all positions with proper delays to avoid rate limiting"""
         if not self.positions_data:
             QMessageBox.information(self, "No Positions", "No positions to close")
             return
@@ -548,35 +601,105 @@ class ProfessionalPositionMonitor(QDialog):
             self, 'Close All Positions',
             f'Close ALL {total_positions} positions?\n\n'
             f'This will place MARKET SELL orders for all positions.\n'
+            f'Orders will be submitted with delays to avoid rate limiting.\n'
             f'This action cannot be undone.',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            for symbol, item in self.positions_data.items():
+            # Create a snapshot of positions to avoid dictionary modification during iteration
+            positions_to_close = list(self.positions_data.items())
+            self.log_message(f"Starting to close {len(positions_to_close)} positions with rate limiting protection...", "INFO")
+            
+            order_count = 0
+            for symbol, item in positions_to_close:
                 if hasattr(item, 'position') and item.position > 0:
-                    self.place_sell_order(symbol, int(item.position))
+                    order_count += 1
+                    self.log_message(f"Submitting order {order_count}/{len(positions_to_close)}: {symbol}", "INFO")
+                    
+                    success = self.place_sell_order(symbol, int(item.position))
+                    
+                    # Add delay between orders to avoid rate limiting (IBKR allows ~50 orders per second)
+                    if order_count < len(positions_to_close):  # Don't delay after the last order
+                        self.log_message(f"Waiting 0.5 seconds before next order to avoid rate limiting...", "INFO")
+                        time.sleep(0.5)  # 500ms delay between orders
+            
+            self.log_message(f"Completed submitting {order_count} sell orders", "SUCCESS")
     
     def place_sell_order(self, symbol, quantity):
-        """Place a sell order for a position"""
+        """Place a sell order for a position with enhanced error handling"""
         try:
             if not self.ib or not self.ib.isConnected():
                 self.log_message("Not connected to IBKR", "ERROR")
-                return
+                return False
             
-            # Create contract
+            self.log_message(f"Attempting to place sell order: {quantity} shares of {symbol}", "INFO")
+            
+            # Create contract with more specific details
             contract = Stock(symbol, 'SMART', 'USD')
             
-            # Place market sell order
+            # Qualify the contract to ensure it's valid
+            try:
+                qualified_contracts = self.ib.qualifyContracts(contract)
+                if not qualified_contracts:
+                    self.log_message(f"Failed to qualify contract for {symbol}", "ERROR")
+                    return False
+                
+                contract = qualified_contracts[0]
+                self.log_message(f"Contract qualified for {symbol}: {contract.primaryExchange}", "INFO")
+                
+            except Exception as e:
+                self.log_message(f"Contract qualification failed for {symbol}: {e}", "WARNING")
+                # Continue with original contract - sometimes this still works
+            
+            # Create market sell order
             order = MarketOrder('SELL', quantity)
+            
+            # Add order transmission settings to improve reliability
+            order.transmit = True
+            order.outsideRth = False  # Only during regular trading hours
+            
+            # Place the order
             trade = self.ib.placeOrder(contract, order)
             
-            self.log_message(f"Sell order placed: {quantity} shares of {symbol}", "SUCCESS")
+            # Wait a moment for order to be processed
+            self.ib.sleep(0.1)
             
-            # The order will be automatically tracked via orderStatusEvent
+            # Check if order was accepted
+            if trade and trade.order:
+                order_id = trade.order.orderId
+                status = trade.orderStatus.status if trade.orderStatus else "Unknown"
+                
+                self.log_message(f"Sell order submitted for {symbol}: Order ID {order_id}, Status: {status}", "SUCCESS")
+                
+                # Additional validation - check if order appears in open orders
+                try:
+                    open_orders = self.ib.openOrders()
+                    order_found = any(o.order.orderId == order_id for o in open_orders)
+                    if order_found:
+                        self.log_message(f"Order {order_id} confirmed in open orders list", "SUCCESS")
+                    else:
+                        self.log_message(f"Warning: Order {order_id} not found in open orders list", "WARNING")
+                except Exception as e:
+                    self.log_message(f"Could not verify order in open orders: {e}", "WARNING")
+                
+                return True
+            else:
+                self.log_message(f"Failed to place order for {symbol} - no trade object returned", "ERROR")
+                return False
             
         except Exception as e:
-            self.log_message(f"Error placing sell order for {symbol}: {e}", "ERROR")
+            self.log_message(f"Error placing sell order for {symbol}: {str(e)}", "ERROR")
+            
+            # Try to get more specific error information
+            if "Invalid contract" in str(e):
+                self.log_message(f"Contract issue for {symbol} - may need manual intervention", "ERROR")
+            elif "rate limit" in str(e).lower():
+                self.log_message(f"Rate limit hit for {symbol} - will retry with longer delay", "WARNING")
+            elif "not connected" in str(e).lower():
+                self.log_message(f"Connection lost while placing order for {symbol}", "ERROR")
+            
+            return False
     
     def closeEvent(self, event):
         """Clean shutdown"""

@@ -171,8 +171,105 @@ class BacktestApp(QMainWindow):
         self.tabs.addTab(self.live_tab, "Live Trading")
         self.tabs.addTab(self.settings_tab, "Settings")
         
-        # Status bar
-        self.statusBar().showMessage("Ready to backtest")
+        # Status bar with exit button
+        status_bar = self.statusBar()
+        status_bar.showMessage("Ready to backtest")
+        
+        # Add exit button to status bar
+        self.exit_button = QPushButton("Exit Application")
+        self.exit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: 4px;
+                border: none;
+                font-size: 12px;
+                margin: 2px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        self.exit_button.clicked.connect(self.safe_close)
+        status_bar.addPermanentWidget(self.exit_button)
+        
+        # Track application state for safe closing
+        self.is_backtest_running = False
+        self.active_dialogs = []
+    
+    def safe_close(self):
+        """Safe close with confirmation if operations are active"""
+        # Check if backtest is running
+        if self.is_backtest_running:
+            reply = QMessageBox.question(
+                self, 'Backtest Running',
+                'A backtest is currently running.\n\n'
+                'Closing now will stop the backtest.\n'
+                'Are you sure you want to exit?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Check for active dialogs (like Position Monitor)
+        if self.active_dialogs:
+            reply = QMessageBox.question(
+                self, 'Active Windows',
+                f'{len(self.active_dialogs)} trading window(s) are still open.\n\n'
+                'Closing may disconnect IBKR connections.\n'
+                'Are you sure you want to exit?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Proceed with close
+        self.close()
+    
+    def closeEvent(self, event):
+        """Handle window close event with proper cleanup"""
+        try:
+            # Check if backtest is running
+            if self.is_backtest_running:
+                reply = QMessageBox.question(
+                    self, 'Confirm Exit',
+                    'A backtest is currently running.\n\n'
+                    'Closing now will stop the backtest.\n'
+                    'Are you sure you want to exit?',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    event.ignore()
+                    return
+            
+            # Stop any running backtest worker
+            if hasattr(self.setup_tab, 'worker') and self.setup_tab.worker and self.setup_tab.worker.isRunning():
+                self.setup_tab.worker.terminate()
+                self.setup_tab.worker.wait(3000)  # Wait up to 3 seconds
+            
+            # Close any active dialogs
+            for dialog in self.active_dialogs[:]:  # Copy list to avoid modification during iteration
+                try:
+                    if dialog and not dialog.isHidden():
+                        dialog.close()
+                except:
+                    pass
+            
+            # Update status
+            self.statusBar().showMessage("Shutting down...")
+            
+            # Accept the close event
+            event.accept()
+            
+        except Exception as e:
+            print(f"Error during close: {e}")
+            # Accept anyway to prevent hanging
+            event.accept()
     
     def create_menu_bar(self):
         """Create the application menu bar"""
@@ -183,7 +280,7 @@ class BacktestApp(QMainWindow):
         
         exit_action = file_menu.addAction("Exit")
         exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self.safe_close)
         
     def apply_professional_style(self):
         """Apply modern, professional styling with larger fonts"""
@@ -256,8 +353,9 @@ class BacktestApp(QMainWindow):
                 font-size: 16px;
             }
             QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus, QComboBox:focus {
-                border-color: #0d6efd;
+                border: 2px solid #0d6efd;
                 outline: none;
+                box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
             }
             QLabel {
                 font-size: 15px;
@@ -563,12 +661,17 @@ class StrategySetupTab(QWidget):
         self.worker.backtest_completed.connect(self.on_backtest_completed)
         self.worker.backtest_failed.connect(self.on_backtest_failed)
         
-        # Update UI
+        # Update UI and track state
         print("DEBUG: Starting worker thread")
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.run_button.setEnabled(False)
         self.run_button.setText("Running...")
+        
+        # Mark backtest as running
+        main_window = self.window()
+        if hasattr(main_window, 'is_backtest_running'):
+            main_window.is_backtest_running = True
         
         # Start the worker thread
         print("DEBUG: About to start worker.start()")
@@ -591,10 +694,12 @@ class StrategySetupTab(QWidget):
             self.run_button.setEnabled(True)
             self.run_button.setText("🚀 Run Backtest")
             
-            # Update status bar
+            # Update status bar and mark backtest as complete
             main_window = self.window()
             if hasattr(main_window, 'statusBar'):
                 main_window.statusBar().showMessage("Backtest completed successfully!")
+            if hasattr(main_window, 'is_backtest_running'):
+                main_window.is_backtest_running = False
                 
             print("DEBUG: About to switch to results tab")
         except Exception as e:
@@ -622,10 +727,12 @@ class StrategySetupTab(QWidget):
         self.run_button.setEnabled(True)
         self.run_button.setText("🚀 Run Backtest")
         
-        # Update status bar
+        # Update status bar and mark backtest as complete
         main_window = self.window()
         if hasattr(main_window, 'statusBar'):
             main_window.statusBar().showMessage("Backtest failed")
+        if hasattr(main_window, 'is_backtest_running'):
+            main_window.is_backtest_running = False
             
         self.validation_text.setPlainText(f"❌ Backtest failed: {error_message}")
 
@@ -976,27 +1083,56 @@ Live Trading Features:
         layout.addWidget(docs_group)
         
     def launch_position_monitor(self):
-        """Open FIXED position monitor with our pending sales tracking"""
-        self.status_text.append("🚀 Launching FIXED Position Monitor...")
+        """Open Professional Position Monitor with real-time updates"""
+        self.status_text.append("🚀 Launching Professional Position Monitor...")
         
         try:
-            from simple_working_monitor import SimpleWorkingMonitor
-            self.status_text.append("✅ FixedMonitor imported successfully")
+            from professional_position_monitor import ProfessionalPositionMonitor
+            self.status_text.append("✅ Professional Monitor imported successfully")
             
-            # Launch the fixed monitor without shared connection to avoid complications
-            dialog = SimpleWorkingMonitor(self)
-            self.status_text.append("✅ FixedMonitor created successfully") 
+            # Launch the professional monitor
+            dialog = ProfessionalPositionMonitor(self)
+            self.status_text.append("✅ Professional Monitor created successfully")
             
+            # Track the dialog for safe closing
+            main_window = self.window()
+            if hasattr(main_window, 'active_dialogs'):
+                main_window.active_dialogs.append(dialog)
+            
+            # Show dialog and wait for it to close
             dialog.exec()
-            self.status_text.append("✅ FIXED Position Monitor closed normally")
+            
+            # Remove from tracking when closed
+            if hasattr(main_window, 'active_dialogs') and dialog in main_window.active_dialogs:
+                main_window.active_dialogs.remove(dialog)
+            
+            self.status_text.append("✅ Professional Position Monitor closed normally")
             
         except Exception as e:
-            self.status_text.append(f"❌ FIXED Monitor failed: {e}")
+            self.status_text.append(f"❌ Professional Monitor failed: {e}")
             import traceback
             traceback.print_exc()
             
-            # NO FALLBACK - we want to fix the real issue, not mask it
-            self.status_text.append("❌ No fallback - please report this error")
+            # Fallback to simple monitor if professional fails
+            self.status_text.append("🔄 Falling back to Simple Monitor...")
+            try:
+                from simple_working_monitor import SimpleWorkingMonitor
+                dialog = SimpleWorkingMonitor(self)
+                
+                # Track the fallback dialog too
+                main_window = self.window()
+                if hasattr(main_window, 'active_dialogs'):
+                    main_window.active_dialogs.append(dialog)
+                
+                dialog.exec()
+                
+                # Remove from tracking when closed
+                if hasattr(main_window, 'active_dialogs') and dialog in main_window.active_dialogs:
+                    main_window.active_dialogs.remove(dialog)
+                
+                self.status_text.append("✅ Simple Monitor fallback successful")
+            except Exception as e2:
+                self.status_text.append(f"❌ Fallback also failed: {e2}")
     
     def launch_setup(self):
         """Open integrated IBKR setup dialog"""
@@ -1273,7 +1409,10 @@ class SettingsTab(QWidget):
 
 def main():
     """Main application entry point"""
-    app = QApplication(sys.argv)
+    # Check if QApplication already exists
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     
     # Set application properties
     app.setApplicationName("Weekly ER Backtest")
@@ -1284,8 +1423,8 @@ def main():
     window = BacktestApp()
     window.show()
     
-    # Run application
-    sys.exit(app.exec())
+    # Run application (avoid sys.exit to prevent hanging)
+    return app.exec()
 
 if __name__ == "__main__":
     main()

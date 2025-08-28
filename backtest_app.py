@@ -19,7 +19,7 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 
 # Import matplotlib for charts
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 import pandas as pd

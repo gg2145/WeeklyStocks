@@ -18,8 +18,10 @@ from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QPalette, QColor
 
 # Import matplotlib for charts
+import matplotlib
+matplotlib.use('Qt5Agg')  # Use Qt5Agg backend which is more widely available
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 import pandas as pd
@@ -40,69 +42,92 @@ class ChartWidget(FigureCanvas):
         
     def plot_equity_curve(self, results: BacktestResults):
         """Plot the equity curve from backtest results"""
-        self.figure.clear()
-        
-        if results.equity_curve.empty:
-            # Show empty chart message
+        try:
+            self.figure.clear()
+            
+            if results.equity_curve.empty:
+                # Show empty chart message
+                ax = self.figure.add_subplot(111)
+                ax.text(0.5, 0.5, 'No data to display', 
+                       horizontalalignment='center', verticalalignment='center',
+                       transform=ax.transAxes, fontsize=16, color='gray')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                self.draw()
+                return
+            
+            # Limit data points to prevent GUI hanging
+            equity_df = results.equity_curve.copy()
+            if len(equity_df) > 500:  # Downsample if too many points
+                step = len(equity_df) // 500
+                equity_df = equity_df.iloc[::step]
+            
+            # Convert dates
+            equity_df['date'] = pd.to_datetime(equity_df['date'])
+            
+            # Create subplots with smaller figure to reduce memory
+            ax1 = self.figure.add_subplot(211)  # Equity curve
+            ax2 = self.figure.add_subplot(212)  # Drawdown
+            
+            # Plot equity curve with reduced complexity
+            ax1.plot(equity_df['date'], equity_df['equity'], 'b-', linewidth=1.5, label='Portfolio Value')
+            ax1.set_title('Portfolio Performance', fontweight='bold', fontsize=12)
+            ax1.set_ylabel('Portfolio Value ($)', fontweight='bold', fontsize=10)
+            ax1.grid(True, alpha=0.2)
+            ax1.legend(fontsize=10)
+            
+            # Format y-axis as currency
+            ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+            
+            # Plot drawdown
+            if 'drawdown' not in equity_df.columns:
+                # Calculate drawdown if not present
+                equity_df['peak'] = equity_df['equity'].cummax()
+                equity_df['drawdown'] = (equity_df['equity'] - equity_df['peak']) / equity_df['peak'] * 100
+            
+            ax2.fill_between(equity_df['date'], equity_df['drawdown'], 0, 
+                           color='red', alpha=0.2, label='Drawdown')
+            ax2.plot(equity_df['date'], equity_df['drawdown'], 'r-', linewidth=1)
+            
+            ax2.set_title('Drawdown', fontweight='bold', fontsize=12)
+            ax2.set_xlabel('Date', fontweight='bold', fontsize=10)
+            ax2.set_ylabel('Drawdown (%)', fontweight='bold', fontsize=10)
+            ax2.grid(True, alpha=0.2)
+            ax2.legend(fontsize=10)
+            
+            # Simplified date formatting to reduce processing
+            for ax in [ax1, ax2]:
+                ax.tick_params(axis='x', rotation=45, labelsize=8)
+                ax.tick_params(axis='y', labelsize=8)
+                # Use fewer date ticks to improve performance
+                if len(equity_df) > 50:
+                    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+                    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+                else:
+                    ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=2))
+                    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
+            
+            # Adjust layout with reduced padding
+            self.figure.tight_layout(pad=1.0)
+            
+            # Force immediate draw to prevent hanging
+            self.draw()
+            
+            # Process events to keep GUI responsive
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+            
+        except Exception as e:
+            print(f"Error plotting equity curve: {e}")
+            # Show error message instead of hanging
+            self.figure.clear()
             ax = self.figure.add_subplot(111)
-            ax.text(0.5, 0.5, 'No data to display', 
+            ax.text(0.5, 0.5, f'Chart Error: {str(e)[:50]}...', 
                    horizontalalignment='center', verticalalignment='center',
-                   transform=ax.transAxes, fontsize=16, color='gray')
+                   transform=ax.transAxes, fontsize=12, color='red')
             ax.set_xticks([])
             ax.set_yticks([])
             self.draw()
-            return
-        
-        # Create subplots
-        ax1 = self.figure.add_subplot(211)  # Equity curve
-        ax2 = self.figure.add_subplot(212)  # Drawdown
-        
-        # Convert dates
-        equity_df = results.equity_curve.copy()
-        equity_df['date'] = pd.to_datetime(equity_df['date'])
-        
-        # Plot equity curve
-        ax1.plot(equity_df['date'], equity_df['equity'], 'b-', linewidth=2, label='Portfolio Value')
-        ax1.set_title('Portfolio Performance', fontweight='bold', fontsize=14)
-        ax1.set_ylabel('Portfolio Value ($)', fontweight='bold')
-        ax1.grid(True, alpha=0.3)
-        ax1.legend()
-        
-        # Format y-axis as currency
-        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-        
-        # Plot drawdown
-        if 'drawdown' in equity_df.columns:
-            ax2.fill_between(equity_df['date'], equity_df['drawdown'], 0, 
-                           color='red', alpha=0.3, label='Drawdown')
-            ax2.plot(equity_df['date'], equity_df['drawdown'], 'r-', linewidth=1)
-        else:
-            # Calculate drawdown if not present
-            equity_df['peak'] = equity_df['equity'].cummax()
-            equity_df['drawdown'] = (equity_df['equity'] - equity_df['peak']) / equity_df['peak'] * 100
-            ax2.fill_between(equity_df['date'], equity_df['drawdown'], 0, 
-                           color='red', alpha=0.3, label='Drawdown')
-            ax2.plot(equity_df['date'], equity_df['drawdown'], 'r-', linewidth=1)
-        
-        ax2.set_title('Drawdown', fontweight='bold', fontsize=14)
-        ax2.set_xlabel('Date', fontweight='bold')
-        ax2.set_ylabel('Drawdown (%)', fontweight='bold')
-        ax2.grid(True, alpha=0.3)
-        ax2.legend()
-        
-        # Format dates on x-axis
-        for ax in [ax1, ax2]:
-            ax.tick_params(axis='x', rotation=45)
-            if len(equity_df) > 20:
-                ax.xaxis.set_major_locator(mdates.MonthLocator())
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-            else:
-                ax.xaxis.set_major_locator(mdates.WeekdayLocator())
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
-        
-        # Adjust layout
-        self.figure.tight_layout()
-        self.draw()
 
 class BacktestWorker(QThread):
     """Background worker for running backtests"""
@@ -120,13 +145,13 @@ class BacktestWorker(QThread):
             print("DEBUG: BacktestWorker starting...")
             print(f"DEBUG: Config - Symbols: {len(self.config.symbols)}, Start: {self.config.start_date}, End: {self.config.end_date}")
             
-            engine = BacktestEngine(self.config)
+            self.engine = BacktestEngine(self.config)
             
             def progress_callback(message, percent):
                 self.progress_updated.emit(message, percent)
                 
             print("DEBUG: About to call engine.run_backtest()")
-            results = engine.run_backtest(progress_callback)
+            results = self.engine.run_backtest(progress_callback)
             print("DEBUG: Engine completed, emitting results")
             self.backtest_completed.emit(results)
             
@@ -171,6 +196,9 @@ class BacktestApp(QMainWindow):
         self.tabs.addTab(self.live_tab, "Live Trading")
         self.tabs.addTab(self.settings_tab, "Settings")
         
+        # Connect tab change signal to handle navigation
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        
         # Status bar with exit button
         status_bar = self.statusBar()
         status_bar.showMessage("Ready to backtest")
@@ -198,6 +226,24 @@ class BacktestApp(QMainWindow):
         # Track application state for safe closing
         self.is_backtest_running = False
         self.active_dialogs = []
+    
+    def on_tab_changed(self, index):
+        """Handle tab change events to prevent hanging"""
+        try:
+            # Process events to keep GUI responsive during tab changes
+            QApplication.processEvents()
+            
+            # Update status bar based on current tab
+            tab_names = ["Strategy Setup", "Results & Analysis", "Live Trading", "Settings"]
+            if 0 <= index < len(tab_names):
+                self.statusBar().showMessage(f"Switched to {tab_names[index]}")
+            
+            # Force garbage collection to free memory from previous tab
+            import gc
+            gc.collect()
+            
+        except Exception as e:
+            print(f"Error during tab change: {e}")
     
     def safe_close(self):
         """Safe close with confirmation if operations are active"""
@@ -733,8 +779,37 @@ class StrategySetupTab(QWidget):
             main_window.statusBar().showMessage("Backtest failed")
         if hasattr(main_window, 'is_backtest_running'):
             main_window.is_backtest_running = False
+        
+        # Show detailed error information
+        detailed_error = f"❌ Backtest failed: {error_message}\n\n"
+        
+        # Try to get download errors from the worker if available
+        if hasattr(self.worker, 'engine') and hasattr(self.worker.engine, 'download_errors'):
+            if self.worker.engine.download_errors:
+                detailed_error += "Download Errors:\n"
+                for error in self.worker.engine.download_errors:
+                    detailed_error += f"• {error}\n"
+                detailed_error += "\n"
             
-        self.validation_text.setPlainText(f"❌ Backtest failed: {error_message}")
+            if hasattr(self.worker.engine, 'successful_downloads') and self.worker.engine.successful_downloads:
+                detailed_error += f"Successfully downloaded: {', '.join(self.worker.engine.successful_downloads)}\n\n"
+        
+        detailed_error += "💡 Troubleshooting:\n"
+        detailed_error += "• Check internet connection\n"
+        detailed_error += "• Verify symbol names (TQQQ, SPXL, SQQQ)\n"
+        detailed_error += "• Try a different date range\n"
+        detailed_error += "• Check if market was open on selected dates"
+        
+        self.validation_text.setPlainText(detailed_error)
+        
+        # Also show popup for critical errors
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Backtest Failed")
+        msg.setText("❌ Backtest Failed")
+        msg.setDetailedText(detailed_error)
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.exec()
 
 class ResultsTab(QWidget):
     """Results and analysis tab"""

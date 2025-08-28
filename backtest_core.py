@@ -53,6 +53,9 @@ class BacktestEngine:
         
     def download_data(self, progress_callback=None) -> bool:
         """Download price data for all symbols"""
+        download_errors = []
+        successful_downloads = []
+        
         try:
             total_symbols = len(self.config.symbols)
             
@@ -60,44 +63,82 @@ class BacktestEngine:
                 if progress_callback:
                     progress_callback(f"Downloading {symbol}...", int((i / total_symbols) * 50))
                 
-                # Download data with timeout
-                ticker = yf.Ticker(symbol)
-                data = ticker.history(
-                    start=self.config.start_date,
-                    end=self.config.end_date,
-                    interval="1d",
-                    timeout=10
-                )
-                
-                if data.empty:
-                    print(f"Warning: No data for {symbol}")
-                    continue
+                try:
+                    # Download data with timeout
+                    ticker = yf.Ticker(symbol)
+                    data = ticker.history(
+                        start=self.config.start_date,
+                        end=self.config.end_date,
+                        interval="1d",
+                        timeout=15  # Increased timeout for leveraged ETFs
+                    )
                     
-                # Clean data
-                data = data.dropna()
-                if len(data) < 1:  # Need at least 1 day of data
-                    print(f"Warning: No data for {symbol} ({len(data)} days)")
-                    continue
-                # Show which days we actually got for first few symbols
-                if symbol in ['AAL', 'ACHC', 'ADC']:
-                    print(f"DEBUG: Loaded {len(data)} days for {symbol}")
-                    print(f"DEBUG: {symbol} dates: {data.index.strftime('%Y-%m-%d').tolist()}")
-                    print(f"DEBUG: Expected: 2025-08-18 to 2025-08-22")
+                    if data.empty:
+                        error_msg = f"No data returned for {symbol} (date range: {self.config.start_date} to {self.config.end_date})"
+                        print(f"WARNING: {error_msg}")
+                        download_errors.append(error_msg)
+                        continue
+                        
+                    # Clean data
+                    data = data.dropna()
+                    if len(data) < 1:  # Need at least 1 day of data
+                        error_msg = f"No valid data for {symbol} after cleaning ({len(data)} days)"
+                        print(f"WARNING: {error_msg}")
+                        download_errors.append(error_msg)
+                        continue
                     
-                self.data[symbol] = data
+                    # Debug output for all symbols when using small universe
+                    if len(self.config.symbols) <= 10:  # Manual selection
+                        print(f"SUCCESS: Loaded {len(data)} days for {symbol}")
+                        print(f"  Date range: {data.index[0].strftime('%Y-%m-%d')} to {data.index[-1].strftime('%Y-%m-%d')}")
+                        print(f"  Sample prices: Open=${data['Open'].iloc[-1]:.2f}, Close=${data['Close'].iloc[-1]:.2f}")
+                        
+                    self.data[symbol] = data
+                    successful_downloads.append(symbol)
+                    
+                except Exception as e:
+                    error_msg = f"Download failed for {symbol}: {str(e)}"
+                    print(f"ERROR: {error_msg}")
+                    download_errors.append(error_msg)
+                    continue
                 
             if progress_callback:
                 progress_callback("Data download complete", 50)
                 
-            successful_symbols = list(self.data.keys())
-            print(f"DEBUG: Successfully loaded data for {len(self.data)} symbols out of {len(self.config.symbols)} total")
-            if successful_symbols:
-                print(f"DEBUG: Loaded symbols: {successful_symbols[:10]}{'...' if len(successful_symbols) > 10 else ''}")
+            # Detailed reporting
+            print(f"\n{'='*50}")
+            print("DATA DOWNLOAD SUMMARY")
+            print(f"{'='*50}")
+            print(f"Requested symbols: {len(self.config.symbols)}")
+            print(f"Successful downloads: {len(successful_downloads)}")
+            print(f"Failed downloads: {len(download_errors)}")
             
-            return len(self.data) > 0
+            if successful_downloads:
+                print(f"✅ Successfully loaded: {', '.join(successful_downloads)}")
+            
+            if download_errors:
+                print(f"❌ Download errors:")
+                for error in download_errors:
+                    print(f"   • {error}")
+            
+            # Store errors for GUI display
+            self.download_errors = download_errors
+            self.successful_downloads = successful_downloads
+            
+            if len(self.data) == 0:
+                print(f"\n❌ CRITICAL: No data downloaded for any symbols!")
+                print(f"   Date range: {self.config.start_date} to {self.config.end_date}")
+                print(f"   This will result in empty backtest results.")
+                return False
+            
+            print(f"{'='*50}\n")
+            return True
             
         except Exception as e:
-            print(f"Error downloading data: {e}")
+            error_msg = f"Critical error in download_data: {e}"
+            print(f"ERROR: {error_msg}")
+            self.download_errors = [error_msg]
+            self.successful_downloads = []
             return False
     
     def calculate_momentum(self, prices: pd.Series, days: int = 5) -> float:
@@ -118,31 +159,67 @@ class BacktestEngine:
         start = pd.to_datetime(self.config.start_date)
         end = pd.to_datetime(self.config.end_date)
         
+        print(f"DEBUG: get_trading_weeks called with start={start.strftime('%Y-%m-%d')}, end={end.strftime('%Y-%m-%d')}")
+        print(f"DEBUG: Date range duration: {(end - start).days} days")
+        
         # For single week or simple date ranges, just use the provided dates
         if (end - start).days <= 7:
             # Simple case: just use start and end dates as one week
-            return [(start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))]
+            week_tuple = (start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+            print(f"DEBUG: Single week detected, returning: {week_tuple}")
+            return [week_tuple]
         
         # Complex logic for multi-week backtests
         weeks = []
         current = start
         
+        print(f"DEBUG: Multi-week backtest, finding complete weeks...")
+        
+        # First, try to include a partial week at the start if it exists
+        if start.weekday() != 0:  # If start is not Monday
+            # Find the Friday of the same week as start
+            days_to_friday = 4 - start.weekday()  # Friday is 4
+            if days_to_friday >= 0:  # Friday is this week or later
+                friday_same_week = start + dt.timedelta(days=days_to_friday)
+                if friday_same_week <= end:
+                    partial_week = (start.strftime('%Y-%m-%d'), friday_same_week.strftime('%Y-%m-%d'))
+                    weeks.append(partial_week)
+                    print(f"DEBUG: Added partial start week: {partial_week}")
+                    current = friday_same_week + dt.timedelta(days=3)  # Move to next Monday
+        
+        # Find complete Monday-Friday weeks
         while current <= end:
             # Find next Monday from current position
-            days_ahead = 0 - current.weekday()  # Monday is 0
-            if days_ahead <= 0:  # If current day is Monday or later in week
-                days_ahead += 7  # Go to next Monday
-            monday = current + dt.timedelta(days=days_ahead)
+            if current.weekday() == 0:  # Already Monday
+                monday = current
+            else:
+                days_ahead = 7 - current.weekday()  # Days until next Monday
+                monday = current + dt.timedelta(days=days_ahead)
             
             if monday > end:  # Monday is past end date
                 break
                 
             friday = monday + dt.timedelta(days=4)
-            if friday <= end:  # Only include complete weeks
-                weeks.append((monday.strftime('%Y-%m-%d'), friday.strftime('%Y-%m-%d')))
-            
-            current = monday + dt.timedelta(days=1)  # Move to Tuesday to find next Monday
-            
+            if friday <= end:  # Complete week fits
+                complete_week = (monday.strftime('%Y-%m-%d'), friday.strftime('%Y-%m-%d'))
+                weeks.append(complete_week)
+                print(f"DEBUG: Added complete week: {complete_week}")
+                current = friday + dt.timedelta(days=3)  # Move to next Monday
+            else:
+                # Partial week at the end
+                if monday <= end:
+                    partial_end_week = (monday.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+                    weeks.append(partial_end_week)
+                    print(f"DEBUG: Added partial end week: {partial_end_week}")
+                break
+        
+        # If no weeks found but we have a valid date range, create one week from the entire range
+        if not weeks and (end - start).days >= 0:
+            fallback_week = (start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+            weeks.append(fallback_week)
+            print(f"DEBUG: No standard weeks found, using fallback week: {fallback_week}")
+        
+        print(f"DEBUG: Final weeks list: {weeks}")
         return weeks
     
     def run_backtest(self, progress_callback=None) -> BacktestResults:
